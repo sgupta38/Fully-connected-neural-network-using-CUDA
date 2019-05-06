@@ -1,6 +1,7 @@
 #include "common.h"
 #include "Carray.h"
 #include "FileParser.h"
+#include "CInputLayer.h"
 #include <iostream>
 
 int main()
@@ -20,4 +21,6 @@ int main()
     parser.read_mnist_images("mnist/t10k-images.idx3-ubyte", test_images);
     static unsigned char test_labels[10000];
     parser.read_mnist_labels("mnist/t10k-labels.idx1-ubyte", test_labels);
+
+    static CInputLayer<Dims<1, 28, 28>> il;
 }

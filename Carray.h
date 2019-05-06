@@ -1,5 +1,5 @@
 //
-// Created by sonu on 5/5/19.
+// Created by sonu
 //
 
 #ifndef NEURAL_NETWORK_CARRAY_H
