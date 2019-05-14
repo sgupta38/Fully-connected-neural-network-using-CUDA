@@ -6,8 +6,8 @@
 #define NEURAL_NETWORK_CINPUTOUTPUT_H
 
 #include "common.h"
+#include "Carray.h"
 
-// Forward declaration
 template<typename T> class CBaseInputLayer;
 template<typename T> class CBaseOutputLayer;
 
@@ -15,8 +15,9 @@ template<size_t D, size_t H, size_t W>
 class CBaseInputLayer<Dims<D, H, W>>
 {
 public:
+    using InputDims = Dims<D, H, W>;
+    using Input = typename ArrayDims<Precision, InputDims>::type;
     CBaseOutputLayer<Dims<D,H,W>> *previous_layer;
-    using Input = typename ArrayDims<Precision , Dims<D,H,W> >::type;
     Input downstream_deriv;
 
     CBaseInputLayer(): previous_layer(nullptr)
@@ -33,7 +34,7 @@ public:
     virtual void train(int label, double minibatch_size) = 0;
     virtual void update_weights(double rate) = 0;
     virtual double loss(Input& in, int label) = 0;
-    virtual void predict(Input& in) = 0;
+    virtual int predict(Input& in) = 0;
 };
 
 template<size_t D, size_t H, size_t W>
@@ -56,7 +57,6 @@ public:
     }
 
     //Functions which needs to be implemented by every required class
-    virtual void backprop(Output& deriv, double minibatch_size) = 0;
+    virtual void backprop(const Output &deriv, const double mb_size) = 0;
 };
-
 #endif //NEURAL_NETWORK_CINPUTOUTPUT_H

@@ -27,7 +27,7 @@ public:
         this->next_layer->train(label, mb_size);
     }
 
-    virtual void backprop(Output& , double ) override {} // No backprop for first layer
+    virtual void backprop(const Output& , const double ) override {} // No backprop for first layer
 
     void update_weights(double rate)
     {
@@ -41,6 +41,5 @@ public:
         return this->next_layer->predict(output);
     }
 };
-
 
 #endif //NEURAL_NETWORK_CINPUTLAYER_H

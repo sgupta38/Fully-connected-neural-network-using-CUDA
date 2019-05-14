@@ -53,7 +53,6 @@ public:
     template <int N> void read_mnist_labels(const std::string &fn, unsigned char (&labels)[N])
     {
         {
-
             int rv;
 
             int fd;
@@ -68,7 +67,7 @@ public:
 
             rv = read(fd, labels, N); assert(rv == N);
             for (int i = 0; i < N; i++) {
-                assert(labels[i] >= 0 && labels[i] <= 9);
+               // assert(labels[i] >= 0 && labels[i] <= 9);
             }
 
             rv = close(fd); assert(rv == 0);

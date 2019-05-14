@@ -7,5 +7,8 @@ add_executable(neural_network
         main.cpp
         common.h
         FileParser.cpp
-        FileParser.h
-        Carray.h CinputOutput.h CInputLayer.h CFullyConnectedLayer.cpp CSoftMaxLayer.cpp CCrossEntropyLayer.cpp)
+        Carray.h
+        CFullyConnectedLayer.tpp
+        CSoftMaxLayer.tpp
+        CCrossEntropyLayer.tpp
+        )

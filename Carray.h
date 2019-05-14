@@ -1,11 +1,50 @@
 //
-// Created by sonu
+// @note: This Array class is created by professor Chiu. Using as it is after understanding.
 //
 
 #ifndef NEURAL_NETWORK_CARRAY_H
 #define NEURAL_NETWORK_CARRAY_H
 
 #include "common.h"
+using std::size_t;
+using Precision = double;
+constexpr double DELTA_H = 1E-5;
+constexpr int PADDING = 2;
+constexpr int FILTER_H = 5;
+constexpr int FILTER_W = 5;
+
+inline double
+derivative_error(double n, double d) {
+    return std::abs(n - d)/std::max(std::abs(n), std::abs(d));
+}
+
+// This holds a sequence of dimensions together in a single type.
+template <size_t DP, size_t HP, size_t WP>
+struct Dims {
+    constexpr static size_t D = DP;
+    constexpr static size_t H = HP;
+    constexpr static size_t W = WP;
+    constexpr static size_t N = D*H*W;
+};
+
+template <typename T, size_t D, size_t H, size_t W>
+std::ostream &operator<<(std::ostream &os, const T (&a)[D][H][W]) {
+    for (size_t h = 0; h < D; h++) {
+        if (h > 0) {
+            os << "----------" << std::endl;
+        }
+        for (size_t i = 0; i < H; i++) {
+            for (size_t j = 0; j < W; j++) {
+                if (j > 0) {
+                    os << " ";
+                }
+                os << std::fixed << std::setprecision(7) << a[h][i][j];
+            }
+            os << "\n";
+        }
+    }
+    return os;
+}
 
 /*
  * Array class:  This is a wrapper around native arrays to get range-checking.
@@ -165,7 +204,6 @@ private:
 template <typename T1, typename T2> struct ArrayDims;
 template <typename T, size_t... Ds>
 struct ArrayDims<T, Dims<Ds...>> {
-using type = Array<T, Ds...>;
+    using type = Array<T, Ds...>;
 };
-
 #endif //NEURAL_NETWORK_CARRAY_H
