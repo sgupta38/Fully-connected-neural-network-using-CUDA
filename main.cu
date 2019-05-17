@@ -1,7 +1,7 @@
 //  @author: Sonu Gupta
 //  @purpose: Main file which creates all NN layers and calls CUDA functions.
 //
-//  @citation: Professor's code is referenced for serial execution
+//  @citation: Professor's code is referenced for serial execution. forward, backprop and update_Weight runs on GPU
 
 #include "common.h"
 #include "Carray.h"
@@ -40,9 +40,17 @@ int main()
     // Layer declarations
 
     static CInputLayer<Dims<1, 28, 28>> il;
-    static CFullyConnectedLayer<Dims<1, 28, 28>, 1024> dl1("dl1", true, .3, 1);
-    static CFullyConnectedLayer<Dims<1, 1, 1024>, 10> dl2("dl2", false, 0, 2);
+
+    //This is hidden layer 1
+    static CFullyConnectedLayer<Dims<1, 28, 28>, 1024> dl1("hd1", true, .3, 1);
+
+    //this is hidden layer 2
+    static CFullyConnectedLayer<Dims<1, 1, 1024>, 10> dl2("hd2", false, 0, 2);
+
+    // Followed by softmax
     static SoftmaxLayer<10> sm;
+
+    //Followed by CRoss entropy
     static CCrossEntropyLayer<10> ce;
 
     //
@@ -53,12 +61,13 @@ int main()
     dl2.next_layer = &sm; sm.previous_layer = &dl2;
     sm.next_layer = &ce; ce.previous_layer = &sm;
 
+    //Keeping values as it is
     std::default_random_engine eng(9815);
     std::uniform_int_distribution<size_t> pick_test(0, 9999);
 
     //epochs start here
 
-    for (int e = 0; e < 2; e++) {
+    for (int e = 0; e < 6; e++) {
         std::vector<int> training(60000);
         std::iota(training.begin(), training.end(), 0);
         assert(*--training.end() == 59999);
@@ -74,7 +83,7 @@ int main()
                         correct++;
                     }
                 }
-                fprintf(stderr, "Epoch %d: Round %d: accuracy=%f\n", e, r, correct/10000.0);
+                fprintf(stderr, "Current Epoch is := %d: Round %d: accuracy is :=%f\n", e, r, correct/10000.0);
             }
 
             for (size_t i = 0; i < 100; i++) {

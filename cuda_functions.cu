@@ -13,6 +13,9 @@
 
 // Extended version
 //
+
+// @purpose: This function takes whole image and all input_weights performs computation on GPU  and writes a result .
+// 			The result is then given back to host where host copies and sends to another layer.
 __global__ void forward_matrixmulEx(int limit, double* input, double* weight, double* out, double* bias, double* dropped, bool isReLu, int depth, int height, int width)
 {
     //int id = threadIdx.x;
@@ -51,6 +54,10 @@ __global__ void forward_matrixmulEx(int limit, double* input, double* weight, do
     }
 }
 
+//
+//	@purpose: This function updates the weight matrix and biases all in one and then copied back to host
+//
+
 __global__ void update_weightmatrixEx(int limit, double* weight, double* weight_deriv, double* bias, double* bias_deriv, int depth, int height, int width, float rate)
 {
 	// resulting matrix will be awidth * bheight
@@ -74,6 +81,10 @@ __global__ void update_weightmatrixEx(int limit, double* weight, double* weight_
         bias_deriv[index] = 0;
     }
 }
+
+// @purpose: backprop just backpropogates all 'weight_matrices'. Here, single node updates weights in one go.
+//
+//
 
 __global__  void backprop_weightmatrixEx(int limit, double* input_device, double* downstream_deriv_device, double* current_kept_device, double* upstream_deriv_device, \
     double* weight_device, double* weight_deriv_device, double* bias_deriv_device, double* output, bool is_relu, int depth, int height, int width, double mb_size)
