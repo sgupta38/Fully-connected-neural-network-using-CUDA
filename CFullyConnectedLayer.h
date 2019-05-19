@@ -10,6 +10,9 @@
 #include "CInputLayer.h"
 #include "Carray.h"
 #include "cuda_functions.h"
+#include <cuda_runtime_api.h>
+#include <cuda.h>
+
 
 template <typename IN_DIMS, size_t NEURONS>
 class CFullyConnectedLayer: public CBaseInputLayer<IN_DIMS>, public CBaseOutputLayer<Dims<1,1, NEURONS >>
@@ -44,7 +47,20 @@ class CFullyConnectedLayer: public CBaseInputLayer<IN_DIMS>, public CBaseOutputL
     virtual double loss (Input& in, int label) override;
     virtual int predict(Input& in) override;
 
+
+public:
+    ~CFullyConnectedLayer();
+
     private:
     void forward(Input& input, Array<Input, NEURONS> &weight, Array<double, NEURONS> bias, Array<double, NEURONS> &dropped, Output& output);
+
+    cudaStream_t stream;
+
+    //backprop variables
+   double *bp_downstream_deriv_device, *bp_upstream_device, *bp_current_kept_device, *bp_op_device;
+   double *bp_input_device, *bp_weight_device, *bp_weight_deriv_device, *bp_bias_deriv_device;
+   double* uw_weight_device, *uw_weight_deriv_device, *uw_bias_device, *uw_bias_deriv_device;
+   double *f_input_device, *f_weight_device, *f_out_device, *f_bias_device ,*f_dropped_device;
+
 };
 #endif //NEURAL_NETWORK_CFULLYCONNECTEDLAYER_H

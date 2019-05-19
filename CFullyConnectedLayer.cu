@@ -9,9 +9,11 @@
 #include <cuda_runtime_api.h>
 #include <cuda.h>
 #include "cuda_functions.h"
+#include <chrono>
+#include <iostream>
 
-template<typename IN_DIMS, size_t NEURONS>
-CFullyConnectedLayer<IN_DIMS, NEURONS>::CFullyConnectedLayer(const std::string &n, bool relu, double do_rate, int ssed_seq)
+template<typename IN_DIMS, size_t N_NEURONS>
+CFullyConnectedLayer<IN_DIMS, N_NEURONS>::CFullyConnectedLayer(const std::string &n, bool relu, double do_rate, int ssed_seq)
         : m_layer_name(n), m_relu(relu), m_keep_prob(1 - do_rate), m_all_kept(1), m_eng(7389 + ssed_seq)
 {
     std::normal_distribution<double> init;
@@ -28,6 +30,81 @@ CFullyConnectedLayer<IN_DIMS, NEURONS>::CFullyConnectedLayer(const std::string &
     m_bias = 0;
     m_weight_deriv = 0;
     m_bias_deriv = 0;
+
+
+   //
+   // CUDA Memory allocation. Since, CudaMalloc Its so much of time. We know neuron count and image size.
+   // Lets allocate only once instead of doing it many time.
+   // This memory will be freed in destructor
+
+   //================================== Backprop ==========================================================
+   const size_t bp_downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   const size_t bp_weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   const size_t bp_weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   const size_t bp_input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
+   const size_t bp_upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   const size_t bp_current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
+   const size_t bp_bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   const size_t bp_op_device_size = sizeof(double) * N_NEURONS;
+
+
+   // Memory Allocation
+   cudaMalloc((void**)&bp_downstream_deriv_device, bp_downstream_deriv_device_size);
+   cudaMalloc((void**)&bp_weight_device, bp_weight_device_size);
+   cudaMalloc((void**)&bp_weight_deriv_device, bp_weight_deriv_device_size);
+   cudaMalloc((void**)&bp_input_device, bp_input_device_size);
+   cudaMalloc((void**)&bp_upstream_device, bp_upstream_device_size);
+   cudaMalloc((void**)&bp_current_kept_device, bp_current_kept_device_size);
+   cudaMalloc((void**)&bp_bias_deriv_device, bp_bias_deriv_device_size);
+   cudaMalloc((void**)&bp_op_device, bp_op_device_size);
+
+   //================================== update_weight ==========================================================
+   const size_t uw_wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+   const size_t uw_wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+   const size_t uw_bsize = sizeof(double) * N_NEURONS;
+   const size_t uw_bdsize = sizeof(double) * N_NEURONS;
+
+   // Memory Allocation
+   cudaMalloc((void**)&uw_weight_device, uw_wsize);
+   cudaMalloc((void**)&uw_weight_deriv_device, uw_wdsize);
+   cudaMalloc((void**)&uw_bias_device, uw_bsize);
+   cudaMalloc((void**)&uw_bias_deriv_device, uw_bdsize);
+
+   //============================= forward===========================================================
+   const size_t f_isize = sizeof(double) * IN_D * IN_H * IN_W;
+   const size_t f_wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   const size_t f_outsize = sizeof(double) * N_NEURONS;
+   const size_t f_biassize = sizeof(double) * N_NEURONS;
+   const size_t f_droppedsize = sizeof(double) * N_NEURONS;
+
+   // Memory Allocation
+   cudaMalloc((void**)&f_input_device, f_isize);
+   cudaMalloc((void**)&f_weight_device, f_wsize);
+   cudaMalloc((void**)&f_out_device, f_outsize);
+   cudaMalloc((void**)&f_bias_device, f_biassize);
+   cudaMalloc((void**)&f_dropped_device, f_droppedsize);
+}
+
+template<typename IN_DIMS, size_t N_NEURONS>
+CFullyConnectedLayer<IN_DIMS, N_NEURONS>::~CFullyConnectedLayer()
+{
+   cudaFree(bp_downstream_deriv_device);
+   cudaFree(bp_weight_device);
+   cudaFree(bp_weight_deriv_device);
+   cudaFree(bp_input_device);
+   cudaFree(bp_upstream_device);
+   cudaFree(bp_current_kept_device);
+   cudaFree(bp_bias_deriv_device);
+   cudaFree(bp_op_device);
+   cudaFree(uw_weight_device);
+   cudaFree(uw_weight_deriv_device);
+   cudaFree(uw_bias_device);
+   cudaFree(uw_bias_deriv_device);
+   cudaFree(f_input_device);
+   cudaFree(f_weight_device);
+   cudaFree(f_out_device);
+   cudaFree(f_bias_device);
+   cudaFree(f_dropped_device);
 }
 
 template<typename IN_DIMS, size_t NEURONS>
@@ -49,72 +126,74 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::backprop(const Output& full_upstr
     auto &upstream_deriv(full_upstream_deriv[0][0]);
     this->downstream_deriv = 0;
     auto &input(this->previous_layer->output);
-    double *downstream_deriv_device, *upstream_device, *current_kept_device, *op_device;
-    double *input_device, *weight_device, *weight_deriv_device, *bias_deriv_device;
 
-    const size_t downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
-    const size_t upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
-    const size_t bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t op_device_size = sizeof(double) * N_NEURONS;
+    const size_t bp_downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    const size_t bp_weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    const size_t bp_weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    const size_t bp_input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
+    const size_t bp_upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    const size_t bp_current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
+    const size_t bp_bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    const size_t bp_op_device_size = sizeof(double) * N_NEURONS;
 
-    // Memory Allocation
-    cudaMalloc((void**)&downstream_deriv_device, downstream_deriv_device_size);
-    cudaMalloc((void**)&weight_device, weight_device_size);
-    cudaMalloc((void**)&weight_deriv_device, weight_deriv_device_size);
-    cudaMalloc((void**)&input_device, input_device_size);
-    cudaMalloc((void**)&upstream_device, upstream_device_size);
-    cudaMalloc((void**)&current_kept_device, current_kept_device_size);
-    cudaMalloc((void**)&bias_deriv_device, bias_deriv_device_size);
-    cudaMalloc((void**)&op_device, op_device_size);
+// #ifdef LOCAL_ALLOCATION
+//      double *bp_downstream_deriv_device, *bp_upstream_device, *bp_current_kept_device, *bp_op_device;
+//      double *bp_input_device, *bp_weight_device, *bp_weight_deriv_device, *bp_bias_deriv_device;
+//     // Memory Allocation
+//     cudaMalloc((void**)&bp_downstream_deriv_device, bp_downstream_deriv_device_size);
+//     cudaMalloc((void**)&bp_weight_device, bp_weight_device_size);
+//     cudaMalloc((void**)&bp_weight_deriv_device, bp_weight_deriv_device_size);
+//     cudaMalloc((void**)&bp_input_device, bp_input_device_size);
+//     cudaMalloc((void**)&bp_upstream_device, bp_upstream_device_size);
+//     cudaMalloc((void**)&bp_current_kept_device, bp_current_kept_device_size);
+//     cudaMalloc((void**)&bp_bias_deriv_device, bp_bias_deriv_device_size);
+//     cudaMalloc((void**)&bp_op_device, bp_op_device_size);
+// #endif
 
     // Copy to device memory
-    rv = cudaMemcpy(downstream_deriv_device, &this->downstream_deriv, downstream_deriv_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_downstream_deriv_device, &this->downstream_deriv, bp_downstream_deriv_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(weight_device, &this->m_weight, weight_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_weight_device, &this->m_weight, bp_weight_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(weight_deriv_device, &this->m_weight_deriv, weight_deriv_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_weight_deriv_device, &this->m_weight_deriv, bp_weight_deriv_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(input_device, &input, input_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_input_device, &input, bp_input_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(upstream_device, &upstream_deriv, upstream_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_upstream_device, &upstream_deriv, bp_upstream_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(current_kept_device, &m_current_kept, current_kept_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_current_kept_device, &m_current_kept, bp_current_kept_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(bias_deriv_device, &m_bias_deriv, bias_deriv_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_bias_deriv_device, &m_bias_deriv, bp_bias_deriv_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(op_device, &this->output, op_device_size, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(bp_op_device, &this->output, bp_op_device_size, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
@@ -133,30 +212,30 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::backprop(const Output& full_upstr
     // Round up according to array size
     gridSize = ((N_NEURONS* IN_D * IN_H * IN_W) + blockSize - 1) / blockSize;
 
-    backprop_weightmatrixEx<<<gridSize, blockSize >>>(N_NEURONS, input_device, downstream_deriv_device, current_kept_device, upstream_device, \
-                                                weight_device, weight_deriv_device, bias_deriv_device, op_device, m_relu, IN_D, IN_H, IN_W, mb_size); // need to pass width
+    backprop_weightmatrixEx<<<gridSize, blockSize >>>(N_NEURONS, bp_input_device, bp_downstream_deriv_device, bp_current_kept_device, bp_upstream_device, \
+                                                bp_weight_device, bp_weight_deriv_device, bp_bias_deriv_device, bp_op_device, m_relu, IN_D, IN_H, IN_W, mb_size); // need to pass width
 
     // backprop_weightmatrixEx<<<1, N_NEURONS >>>(N_NEURONS, input_device, downstream_deriv_device, current_kept_device, upstream_device, \
     //                                             weight_device, weight_deriv_device, bias_deriv_device, op_device, m_relu, IN_D, IN_H, IN_W, mb_size); // need to pass width
 
-    cudaDeviceSynchronize();
+   // cudaDeviceSynchronize();
 
     // Copy to host device
-    double* test_down = new double[downstream_deriv_device_size];
+    double* test_down = new double[bp_downstream_deriv_device_size];
 
-    rv = cudaMemcpy(test_down, downstream_deriv_device, downstream_deriv_device_size, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(test_down, bp_downstream_deriv_device, bp_downstream_deriv_device_size, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(&m_weight_deriv, weight_deriv_device, weight_deriv_device_size, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&m_weight_deriv, bp_weight_deriv_device, bp_weight_deriv_device_size, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(&m_bias_deriv, bias_deriv_device, bias_deriv_device_size, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&m_bias_deriv, bp_bias_deriv_device, bp_bias_deriv_device_size, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
@@ -178,15 +257,17 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::backprop(const Output& full_upstr
 
     memcpy(&this->downstream_deriv, t, sizeof(this->downstream_deriv));
 
-    // Memory De- allocation
-    cudaFree(downstream_deriv_device);
-    cudaFree(weight_device);
-    cudaFree(weight_deriv_device);
-    cudaFree(input_device);
-    cudaFree(upstream_device);
-    cudaFree(current_kept_device);
-    cudaFree(bias_deriv_device);
-    cudaFree(op_device);
+// #ifdef LOCAL_ALLOCATION
+//     // Memory De- allocation
+//     cudaFree(bp_downstream_deriv_device);
+//     cudaFree(bp_weight_device);
+//     cudaFree(bp_weight_deriv_device);
+//     cudaFree(bp_input_device);
+//     cudaFree(bp_upstream_device);
+//     cudaFree(bp_current_kept_device);
+//     cudaFree(bp_bias_deriv_device);
+//     cudaFree(bp_op_device);
+// #endif
 
     this->previous_layer->backprop(this->downstream_deriv, mb_size);
 }
@@ -197,38 +278,39 @@ template<typename IN_DIMS, size_t N_NEURONS>
 void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::update_weights(double rate)
 {
     cudaError_t rv;
-    double* weight_device, *weight_deriv_device, *bias_device, *bias_deriv_device;
-    const size_t wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
-    const size_t wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
-    const size_t bsize = sizeof(double) * N_NEURONS;
-    const size_t bdsize = sizeof(double) * N_NEURONS;
+    const size_t uw_wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+    const size_t uw_wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+    const size_t uw_bsize = sizeof(double) * N_NEURONS;
+    const size_t uw_bdsize = sizeof(double) * N_NEURONS;
 
     // Memory Allocation
-    cudaMalloc((void**)&weight_device, wsize);
-    cudaMalloc((void**)&weight_deriv_device, wdsize);
-    cudaMalloc((void**)&bias_device, bsize);
-    cudaMalloc((void**)&bias_deriv_device, bdsize);
-
+// #ifdef LOCAL_ALLOCATION
+//     double* uw_weight_device, *uw_weight_deriv_device, *uw_bias_device, *uw_bias_deriv_device;
+//     cudaMalloc((void**)&uw_weight_device, uw_wsize);
+//     cudaMalloc((void**)&uw_weight_deriv_device, uw_wdsize);
+//     cudaMalloc((void**)&uw_bias_device, uw_bsize);
+//     cudaMalloc((void**)&uw_bias_deriv_device, uw_bdsize);
+// #endif
     // Copy to device memory
-    rv = cudaMemcpy(weight_device, &m_weight, wsize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(uw_weight_device, &m_weight, uw_wsize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(weight_deriv_device, &m_weight_deriv, wdsize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(uw_weight_deriv_device, &m_weight_deriv, uw_wdsize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(bias_device, &m_bias, bsize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(uw_bias_device, &m_bias, uw_bsize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(bias_deriv_device, &m_bias_deriv, bdsize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(uw_bias_deriv_device, &m_bias_deriv, uw_bdsize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
@@ -246,42 +328,44 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::update_weights(double rate)
     // Round up according to array size
     gridSize = ((N_NEURONS* IN_D * IN_H * IN_W) + blockSize - 1) / blockSize;
 
-    update_weightmatrixEx<<<gridSize, blockSize>>>(N_NEURONS, weight_device, weight_deriv_device, bias_device, bias_deriv_device, IN_D, IN_H, IN_W, rate); // need to pass width
+    update_weightmatrixEx<<<gridSize, blockSize>>>(N_NEURONS, uw_weight_device, uw_weight_deriv_device, uw_bias_device, uw_bias_deriv_device, IN_D, IN_H, IN_W, rate); // need to pass width
     //update_weightmatrixEx<<<1, N_NEURONS>>>(N_NEURONS, weight_device, weight_deriv_device, bias_device, bias_deriv_device, IN_D, IN_H, IN_W, rate); // need to pass width
 
-    cudaDeviceSynchronize();
+   // cudaDeviceSynchronize();
 
     // Copy to host device
-    rv = cudaMemcpy(&m_weight, weight_device, wsize, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&m_weight, uw_weight_device, uw_wsize, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(&m_weight_deriv, weight_deriv_device, wdsize, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&m_weight_deriv, uw_weight_deriv_device, uw_wdsize, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(&m_bias, bias_device, bsize, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&m_bias, uw_bias_device, uw_bsize, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
-    rv = cudaMemcpy(&m_bias_deriv, bias_deriv_device, bdsize, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&m_bias_deriv, uw_bias_deriv_device, uw_bdsize, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
+// #ifdef LOCAL_ALLOCATION
 
-    // Memory De- allocation
-    cudaFree(weight_device);
-    cudaFree(weight_deriv_device);
-    cudaFree(bias_device);
-    cudaFree(bias_deriv_device);
+//     // Memory De- allocation
+//     cudaFree(uw_weight_device);
+//     cudaFree(uw_weight_deriv_device);
+//     cudaFree(uw_bias_device);
+//     cudaFree(uw_bias_deriv_device);
+// #endif
 
     this->next_layer->update_weights(rate);
 }
@@ -306,47 +390,53 @@ template<typename IN_DIMS, size_t N_NEURONS>
 void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::forward(Input& input, Array<Input, N_NEURONS> &weight, Array<double, N_NEURONS> bias, Array<double, N_NEURONS> &dropped, Output& output)
 {
     cudaError_t rv;
-    double* input_device, *weight_device, *out_device, *bias_device, *dropped_device;
 
-    const size_t isize = sizeof(double) * IN_D * IN_H * IN_W;
-    const size_t wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t outsize = sizeof(double) * N_NEURONS;
-    const size_t biassize = sizeof(double) * N_NEURONS;
-    const size_t droppedsize = sizeof(double) * N_NEURONS;
+    const size_t f_isize = sizeof(double) * IN_D * IN_H * IN_W;
+    const size_t f_wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    const size_t f_outsize = sizeof(double) * N_NEURONS;
+    const size_t f_biassize = sizeof(double) * N_NEURONS;
+    const size_t f_droppedsize = sizeof(double) * N_NEURONS;
+
+    auto start = std::chrono::system_clock::now();
 
     // Memory Allocation
-    cudaMalloc((void**)&input_device, isize);
-    cudaMalloc((void**)&weight_device, wsize);
-    cudaMalloc((void**)&out_device, outsize);
-    cudaMalloc((void**)&bias_device, biassize);
-    cudaMalloc((void**)&dropped_device, droppedsize);
 
-    cudaMemset(input_device, 0, isize);
+// #ifdef LOCAL_ALLOCATION
+//     double *f_input_device, *f_weight_device, *f_out_device, *f_bias_device ,*f_dropped_device;
+
+//     cudaMalloc((void**)&f_input_device, f_isize);
+//     cudaMalloc((void**)&f_weight_device, f_wsize);
+//     cudaMalloc((void**)&f_out_device, f_outsize);
+//     cudaMalloc((void**)&f_bias_device, f_biassize);
+//     cudaMalloc((void**)&f_dropped_device, f_droppedsize);
+// #endif
+
+    cudaMemset(f_input_device, 0, f_isize);
     // Copy to device memory;
-    rv = cudaMemcpy(input_device, &input, isize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(f_input_device, &input, f_isize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorName(rv)<<std::endl;
         std::cout<<" Expected size: "<<sizeof(input)<<"\n";
-        std::cout<<" Actual size: "<<isize<<"\n";
+        std::cout<<" Actual size: "<<f_isize<<"\n";
         exit(0);
     }
 
-    rv = cudaMemcpy(weight_device, &weight, wsize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(f_weight_device, &weight, f_wsize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
 
-    rv = cudaMemcpy(bias_device, &bias, biassize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(f_bias_device, &bias, f_biassize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
 
-    rv = cudaMemcpy(dropped_device, &dropped, droppedsize, cudaMemcpyHostToDevice);
+    rv = cudaMemcpy(f_dropped_device, &dropped, f_droppedsize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
@@ -364,23 +454,25 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::forward(Input& input, Array<Input
     // Round up according to array size
     gridSize = ((N_NEURONS* IN_D * IN_H * IN_W) + blockSize - 1) / blockSize;
 
-    forward_matrixmulEx<<<gridSize, blockSize >>>(N_NEURONS, input_device, weight_device, out_device, bias_device, dropped_device, m_relu, IN_D, IN_H, IN_W); // need to pass width
+    forward_matrixmulEx<<<gridSize, blockSize >>>(N_NEURONS, f_input_device, f_weight_device, f_out_device, f_bias_device, f_dropped_device, m_relu, IN_D, IN_H, IN_W); // need to pass width
     //forward_matrixmulEx<<<1, N_NEURONS >>>(N_NEURONS, input_device, weight_device, out_device, bias_device, dropped_device, m_relu, IN_D, IN_H, IN_W); // need to pass width
 
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
 
     // Copy to host device
-    rv = cudaMemcpy(&output, out_device, outsize, cudaMemcpyDeviceToHost);
+    rv = cudaMemcpy(&output, f_out_device, f_outsize, cudaMemcpyDeviceToHost);
     if(rv != cudaSuccess)
     {
         std::cout<<" Error at "<<__LINE__<<" "<<cudaGetErrorString(rv)<<std::endl;
         exit(0);
     }
 
-    // Memory De- allocation
-    cudaFree(input_device);
-    cudaFree(weight_device);
-    cudaFree(out_device);
-    cudaFree(bias_device);
-    cudaFree(dropped_device);
+// #ifdef LOCAL_ALLOCATION
+//     // Memory De- allocation
+//     cudaFree(f_input_device);
+//     cudaFree(f_weight_device);
+//     cudaFree(f_out_device);
+//     cudaFree(f_bias_device);
+//     cudaFree(f_dropped_device);
+// #endif
 }

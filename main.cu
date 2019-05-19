@@ -42,10 +42,10 @@ int main()
     static CInputLayer<Dims<1, 28, 28>> il;
 
     //This is hidden layer 1
-    static CFullyConnectedLayer<Dims<1, 28, 28>, 1024> dl1("hd1", true, .3, 1);
+    static CFullyConnectedLayer<Dims<1, 28, 28>, 10> dl1("hd1", true, .3, 1);
 
     //this is hidden layer 2
-    static CFullyConnectedLayer<Dims<1, 1, 1024>, 10> dl2("hd2", false, 0, 2);
+    static CFullyConnectedLayer<Dims<1, 1, 10>, 10> dl2("hd2", false, 0, 2);
 
     // Followed by softmax
     static SoftmaxLayer<10> sm;
@@ -67,7 +67,7 @@ int main()
 
     //epochs start here
 
-    for (int e = 0; e < 6; e++) {
+    for (int e = 0; e < 1; e++) {
         std::vector<int> training(60000);
         std::iota(training.begin(), training.end(), 0);
         assert(*--training.end() == 59999);
@@ -77,12 +77,14 @@ int main()
             if (r%100 == 0) {
 
                 int correct = 0;
+                
                 for (size_t i = 0; i < 10000; i++) {
                     size_t ind = pick_test(eng);
                     if (il.predict(test_images[ind]) == test_labels[ind]) {
                         correct++;
                     }
                 }
+
                 fprintf(stderr, "Current Epoch is := %d: Round %d: accuracy is :=%f\n", e, r, correct/10000.0);
             }
 
