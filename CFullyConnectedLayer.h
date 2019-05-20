@@ -54,7 +54,6 @@ public:
     private:
     void forward(Input& input, Array<Input, NEURONS> &weight, Array<double, NEURONS> bias, Array<double, NEURONS> &dropped, Output& output);
 
-    cudaStream_t stream;
 
     //backprop variables
    double *bp_downstream_deriv_device, *bp_upstream_device, *bp_current_kept_device, *bp_op_device;

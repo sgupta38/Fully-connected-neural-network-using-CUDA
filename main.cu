@@ -42,10 +42,10 @@ int main()
     static CInputLayer<Dims<1, 28, 28>> il;
 
     //This is hidden layer 1
-    static CFullyConnectedLayer<Dims<1, 28, 28>, 10> dl1("hd1", true, .3, 1);
+    static CFullyConnectedLayer<Dims<1, 28, 28>, 1024> dl1("hd1", true, .4, 1);
 
     //this is hidden layer 2
-    static CFullyConnectedLayer<Dims<1, 1, 10>, 10> dl2("hd2", false, 0, 2);
+    static CFullyConnectedLayer<Dims<1, 1, 1024>, 10> dl2("hd2", false, 0, 2);
 
     // Followed by softmax
     static SoftmaxLayer<10> sm;
@@ -67,7 +67,7 @@ int main()
 
     //epochs start here
 
-    for (int e = 0; e < 1; e++) {
+    for (int e = 0; e < 6; e++) {
         std::vector<int> training(60000);
         std::iota(training.begin(), training.end(), 0);
         assert(*--training.end() == 59999);

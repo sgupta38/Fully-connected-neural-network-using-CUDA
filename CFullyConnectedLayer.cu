@@ -38,14 +38,14 @@ CFullyConnectedLayer<IN_DIMS, N_NEURONS>::CFullyConnectedLayer(const std::string
    // This memory will be freed in destructor
 
    //================================== Backprop ==========================================================
-   const size_t bp_downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-   const size_t bp_weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-   const size_t bp_weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-   const size_t bp_input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
-   const size_t bp_upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-   const size_t bp_current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
-   const size_t bp_bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-   const size_t bp_op_device_size = sizeof(double) * N_NEURONS;
+   constexpr size_t bp_downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   constexpr size_t bp_weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   constexpr size_t bp_weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   constexpr size_t bp_input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
+   constexpr size_t bp_upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   constexpr size_t bp_current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
+   constexpr size_t bp_bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   constexpr size_t bp_op_device_size = sizeof(double) * N_NEURONS;
 
 
    // Memory Allocation
@@ -59,10 +59,10 @@ CFullyConnectedLayer<IN_DIMS, N_NEURONS>::CFullyConnectedLayer(const std::string
    cudaMalloc((void**)&bp_op_device, bp_op_device_size);
 
    //================================== update_weight ==========================================================
-   const size_t uw_wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
-   const size_t uw_wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
-   const size_t uw_bsize = sizeof(double) * N_NEURONS;
-   const size_t uw_bdsize = sizeof(double) * N_NEURONS;
+   constexpr size_t uw_wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+   constexpr size_t uw_wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+   constexpr size_t uw_bsize = sizeof(double) * N_NEURONS;
+   constexpr size_t uw_bdsize = sizeof(double) * N_NEURONS;
 
    // Memory Allocation
    cudaMalloc((void**)&uw_weight_device, uw_wsize);
@@ -71,11 +71,11 @@ CFullyConnectedLayer<IN_DIMS, N_NEURONS>::CFullyConnectedLayer(const std::string
    cudaMalloc((void**)&uw_bias_deriv_device, uw_bdsize);
 
    //============================= forward===========================================================
-   const size_t f_isize = sizeof(double) * IN_D * IN_H * IN_W;
-   const size_t f_wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-   const size_t f_outsize = sizeof(double) * N_NEURONS;
-   const size_t f_biassize = sizeof(double) * N_NEURONS;
-   const size_t f_droppedsize = sizeof(double) * N_NEURONS;
+   constexpr size_t f_isize = sizeof(double) * IN_D * IN_H * IN_W;
+   constexpr size_t f_wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+   constexpr size_t f_outsize = sizeof(double) * N_NEURONS;
+   constexpr size_t f_biassize = sizeof(double) * N_NEURONS;
+   constexpr size_t f_droppedsize = sizeof(double) * N_NEURONS;
 
    // Memory Allocation
    cudaMalloc((void**)&f_input_device, f_isize);
@@ -127,14 +127,14 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::backprop(const Output& full_upstr
     this->downstream_deriv = 0;
     auto &input(this->previous_layer->output);
 
-    const size_t bp_downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t bp_weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t bp_weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t bp_input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
-    const size_t bp_upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t bp_current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
-    const size_t bp_bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t bp_op_device_size = sizeof(double) * N_NEURONS;
+    constexpr size_t bp_downstream_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    constexpr size_t bp_weight_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    constexpr size_t bp_weight_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    constexpr size_t bp_input_device_size = sizeof(double) * IN_D * IN_H * IN_W;
+    constexpr size_t bp_upstream_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    constexpr size_t bp_current_kept_device_size = sizeof(double) * N_NEURONS *IN_D * IN_H * IN_W;
+    constexpr size_t bp_bias_deriv_device_size = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    constexpr size_t bp_op_device_size = sizeof(double) * N_NEURONS;
 
 // #ifdef LOCAL_ALLOCATION
 //      double *bp_downstream_deriv_device, *bp_upstream_device, *bp_current_kept_device, *bp_op_device;
@@ -278,10 +278,10 @@ template<typename IN_DIMS, size_t N_NEURONS>
 void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::update_weights(double rate)
 {
     cudaError_t rv;
-    const size_t uw_wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
-    const size_t uw_wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
-    const size_t uw_bsize = sizeof(double) * N_NEURONS;
-    const size_t uw_bdsize = sizeof(double) * N_NEURONS;
+    constexpr size_t uw_wsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+    constexpr size_t uw_wdsize = sizeof(double) * N_NEURONS* IN_D * IN_H * IN_W;
+    constexpr size_t uw_bsize = sizeof(double) * N_NEURONS;
+    constexpr size_t uw_bdsize = sizeof(double) * N_NEURONS;
 
     // Memory Allocation
 // #ifdef LOCAL_ALLOCATION
@@ -391,11 +391,11 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::forward(Input& input, Array<Input
 {
     cudaError_t rv;
 
-    const size_t f_isize = sizeof(double) * IN_D * IN_H * IN_W;
-    const size_t f_wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
-    const size_t f_outsize = sizeof(double) * N_NEURONS;
-    const size_t f_biassize = sizeof(double) * N_NEURONS;
-    const size_t f_droppedsize = sizeof(double) * N_NEURONS;
+    constexpr size_t f_isize = sizeof(double) * IN_D * IN_H * IN_W;
+    constexpr size_t f_wsize = sizeof(double) * N_NEURONS * IN_D * IN_H * IN_W;
+    constexpr size_t f_outsize = sizeof(double) * N_NEURONS;
+    constexpr size_t f_biassize = sizeof(double) * N_NEURONS;
+    constexpr size_t f_droppedsize = sizeof(double) * N_NEURONS;
 
     auto start = std::chrono::system_clock::now();
 
@@ -411,7 +411,6 @@ void CFullyConnectedLayer<IN_DIMS, N_NEURONS>::forward(Input& input, Array<Input
 //     cudaMalloc((void**)&f_dropped_device, f_droppedsize);
 // #endif
 
-    cudaMemset(f_input_device, 0, f_isize);
     // Copy to device memory;
     rv = cudaMemcpy(f_input_device, &input, f_isize, cudaMemcpyHostToDevice);
     if(rv != cudaSuccess)
